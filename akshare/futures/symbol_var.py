@@ -134,7 +134,10 @@ def chinese_to_english(chinese_var: str):
         "原油",
         "中质含硫原油",
         "尿素",
-        "苯乙烯"
+        "20号胶",
+        "苯乙烯",
+        "不锈钢",
+        "粳米"
     ]
     english_list = [
         "RU",
@@ -218,7 +221,10 @@ def chinese_to_english(chinese_var: str):
         "SC",
         "SC",
         "UR",
-        "EB"]
+        "NR",
+        "EB",
+        "SS",
+        "RR"]
     pos = chinese_list.index(chinese_var)
     return english_list[pos]
 

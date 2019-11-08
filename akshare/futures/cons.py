@@ -4,13 +4,63 @@
 Author: Albert King
 date: 2019/9/30 13:58
 contact: jindaxiang@163.com
-desc: 常用变量
+desc: 期货配置文件
 """
 import datetime
 import json
 import os
 import re
+import pickle
 
+# sina_tick
+subscribe_exchange_symbol_url = "http://vip.stock.finance.sina.com.cn/quotes_service/view/js/qihuohangqing.js"
+match_main_contract_url = "http://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHQFuturesData"
+match_main_contract_payload = {
+    "page": "1",
+    "num": "5",
+    "sort": "position",
+    "asc": "0",
+    "node": "001",
+    "base": "futures"
+}
+
+inventory_temp_headers = {
+    "Accept": "image/webp,image/apng,image/*,*/*;q=0.8",
+    "Accept-Encoding": "gzip, deflate",
+    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+    "Connection": "keep-alive",
+    "Content-Type": "application/x-www-form-urlencoded",
+    "Cookie": "UM_distinctid=16c378978de5cc-02cfeac5f7869b-c343162-1fa400-16c378978df8d7; __utmz=181566328.1570520149.3.2.utmcsr=baidu|utmccn=(organic)|utmcmd=organic; ASP.NET_SessionId=wj5gxuzl3fvvr25503tquq55; __utmc=181566328; _fxaid=1D9A634AB9F5D0265856F7E85E7BC196%1D%2BOOl1inxPE7181fmKs5HCs%2BdLO%2Fq%2FbSvf46UVjo%2BE7w%3D%1DPYphpUa9OlzWUzatrOQTXLPOVillbwMhTIJas%2ByfkyVL2Hd5XA1GOSslksqDkMTccXvQ2duLNsc0CHT4789JrYNbakJrpzrxLnwtBC5GCTssKHGEpor6EwAZfWJgBUlCs4JYFcGUnh3jIO69A4LsOlRMOGf4c9cd%2FbohSjTx3VA%3D; __utma=181566328.1348268634.1564299852.1571066568.1571068391.7; tgw_l7_route=eb1311426274fc07631b2135a6431f7d; __utmt=1; __utmb=181566328.7.10.1571068391",
+    "Host": "service.99qh.com",
+    "Referer": "http://service.99qh.com/Storage/Storage.aspx?page=99qh",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/77.0.3865.90 Safari/537.36"
+}
+
+sample_headers = {
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3",
+    "Host": "service.99qh.com",
+    "Origin": "http://service.99qh.com",
+    "Referer": "http://www.99qh.com/d/store.aspx",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/77.0.3865.90 Safari/537.36"
+}
+
+qh_headers = {
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3",
+    "Accept-Encoding": "gzip, deflate",
+    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+    "Cache-Control": "max-age=0",
+    "Connection": "keep-alive",
+    "Content-Length": "4458",
+    "Content-Type": "application/x-www-form-urlencoded",
+    "Cookie": "UM_distinctid=16c378978de5cc-02cfeac5f7869b-c343162-1fa400-16c378978df8d7; __utmz=181566328.1570520149.3.2.utmcsr=baidu|utmccn=(organic)|utmcmd=organic; ASP.NET_SessionId=wj5gxuzl3fvvr25503tquq55; __utmc=181566328; _fxaid=1D9A634AB9F5D0265856F7E85E7BC196%1D%2BOOl1inxPE7181fmKs5HCs%2BdLO%2Fq%2FbSvf46UVjo%2BE7w%3D%1DPYphpUa9OlzWUzatrOQTXLPOVillbwMhTIJas%2ByfkyVL2Hd5XA1GOSslksqDkMTccXvQ2duLNsc0CHT4789JrYNbakJrpzrxLnwtBC5GCTssKHGEpor6EwAZfWJgBUlCs4JYFcGUnh3jIO69A4LsOlRMOGf4c9cd%2FbohSjTx3VA%3D; __utma=181566328.1348268634.1564299852.1571066568.1571068391.7; tgw_l7_route=eb1311426274fc07631b2135a6431f7d; __utmt=1; __utmb=181566328.7.10.1571068391",
+    "Host": "service.99qh.com",
+    "Referer": "http://service.99qh.com/Storage/Storage.aspx?page=99qh",
+    "Upgrade-Insecure-Requests": "1",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/77.0.3865.90 Safari/537.36"
+}
+# 交易法门
+JYFM_TOOLS_RECEIPT_DATE_URL = "https://www.jiaoyifamen.com/tools/receipt-expire-info/all?page=1&limit=90"
+#
 QHKC_INDEX_URL = "https://www.qhkch.com/ajax/index_show.php"
 QHKC_INDEX_TREND_URL = "https://qhkch.com/ajax/indexes_trend.php"
 QHKC_INDEX_PROFIT_LOSS_URL = "https://qhkch.com/ajax/indexes_profit_loss.php"
@@ -51,6 +101,7 @@ market_exchange_symbols = {
         "JM",
         "I",
         "EG",
+        "RR",
         "EB"  # 20191009
     ],
     "czce": [
@@ -99,7 +150,9 @@ market_exchange_symbols = {
         "BU",
         "RU",
         "SC",
-        "SP"]}
+        "NR",
+        "SP",
+        "SS"]}
 
 contract_symbols = []
 [contract_symbols.extend(i) for i in market_exchange_symbols.values()]
@@ -159,6 +212,7 @@ CZCE_VOL_RANK_URL_2 = "http://www.czce.com.cn/cn/exchange/%s/datatradeholding/%s
 CZCE_VOL_RANK_URL_3 = "http://www.czce.com.cn/cn/DFSStaticFiles/Future/%s/%s/FutureDataHolding.htm"
 
 DCE_RECEIPT_URL = "http://www.dce.com.cn/publicweb/quotesdata/wbillWeeklyQuotes.html"
+
 SHFE_RECEIPT_URL_1 = "http://www.shfe.com.cn/data/dailydata/%sdailystock.html"
 SHFE_RECEIPT_URL_2 = "http://www.shfe.com.cn/data/dailydata/%sdailystock.dat"
 CZCE_RECEIPT_URL_1 = "http://www.czce.com.cn/cn/exchange/jyxx/sheet/sheet%s.html"
@@ -313,6 +367,7 @@ DCE_MAP = {
     "焦煤": "JM",
     "铁矿石": "I",
     "乙二醇": "EG",
+    "粳米": "RR",
     "苯乙烯": "EB"
 }
 
@@ -345,9 +400,31 @@ def get_json_path(name, module_file):
     :param module_file: filename
     :return: str json_file_path
     """
-    module_folder = os.path.abspath(os.path.dirname(module_file))
-    module_json_path = os.path.join(module_folder, ".", name)
+    module_folder = os.path.abspath(os.path.dirname(os.path.dirname(module_file)))
+    module_json_path = os.path.join(module_folder, "file_fold", name)
     return module_json_path
+
+
+def get_pk_path(name, module_file):
+    """
+    获取 pickle 配置文件的路径(从模块所在目录查找)
+    :param name: 文件名
+    :param module_file: filename
+    :return: str json_file_path
+    """
+    module_folder = os.path.abspath(os.path.dirname(os.path.dirname(module_file)))
+    module_json_path = os.path.join(module_folder, "file_fold", name)
+    return module_json_path
+
+
+def get_pk_data(file_name):
+    """
+    获取交易日历至 2019 年结束, 这里的交易日历需要按年更新
+    :return: json
+    """
+    setting_file_name = file_name
+    setting_file_path = get_pk_path(setting_file_name, __file__)
+    return pickle.load(open(setting_file_path, "rb"))
 
 
 def get_calendar():
