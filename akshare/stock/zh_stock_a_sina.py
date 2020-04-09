@@ -9,10 +9,11 @@ desc: 新浪财经-A股-实时行情数据和历史行情数据(包含前复权�
 """
 import re
 
-import requests
 import demjson
-import pandas as pd
 import execjs
+import pandas as pd
+import requests
+from tqdm import tqdm
 
 from akshare.stock.cons import (zh_sina_a_stock_payload,
                                 zh_sina_a_stock_url,
@@ -82,12 +83,11 @@ def stock_zh_a_spot():
     big_df = pd.DataFrame()
     page_count = get_zh_a_page_count()
     zh_sina_stock_payload_copy = zh_sina_a_stock_payload.copy()
-    for page in range(1, page_count+1):
-        print(page)
+    for page in tqdm(range(1, page_count+1), desc="Please wait for a moment"):
         zh_sina_stock_payload_copy.update({"page": page})
         res = requests.get(
             zh_sina_a_stock_url,
-            params=zh_sina_a_stock_payload)
+            params=zh_sina_stock_payload_copy)
         data_json = demjson.decode(res.text)
         big_df = big_df.append(pd.DataFrame(data_json), ignore_index=True)
     return big_df
@@ -95,8 +95,8 @@ def stock_zh_a_spot():
 
 def stock_zh_a_daily(symbol="sh600000", factor=""):
     """
-    从新浪财经-A股获取某个股票的历史行情数据, 大量抓取容易封IP
-    :param symbol: str e.g., sh600000
+    新浪财经-A股获取某个股票的历史行情数据, 大量抓取容易封IP
+    :param symbol: str sh600000
     :param factor: str 默认为空, 不复权; qfq, 前复权因子; hfq, 后复权因子;
     :return: pandas.DataFrame
     不复权数据
@@ -191,7 +191,9 @@ def stock_zh_a_daily(symbol="sh600000", factor=""):
 
 
 if __name__ == "__main__":
-    hist_data_df = stock_zh_a_daily(symbol="sh600000", factor="qfq")
-    print(hist_data_df)
-    current_data_df = stock_zh_a_spot()
-    print(current_data_df)
+    stock_zh_a_daily_qfq_df = stock_zh_a_daily(symbol="sh600582", factor="qfq")
+    print(stock_zh_a_daily_qfq_df)
+    stock_zh_a_daily_df = stock_zh_a_daily(symbol="sh600582")
+    print(stock_zh_a_daily_df)
+    stock_zh_a_spot_df = stock_zh_a_spot()
+    print(stock_zh_a_spot_df)

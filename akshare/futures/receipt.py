@@ -4,20 +4,20 @@
 Author: Albert King
 date: 2019/9/30 13:58
 contact: jindaxiang@163.com
-desc: 从大连商品交易所, 上海期货交易所, 郑州商品交易所采集每日仓单数据, 建议下午 16:30 以后采集当天数据,
+desc: 从大连商品交易所, 上海期货交易所, 郑州商品交易所采集每日注册仓单数据, 建议下午 16:30 以后采集当天数据,
 避免交易所数据更新不稳定导致的程序出错
 """
-import re
 import datetime
+import re
 import warnings
 from typing import List
 
 import pandas as pd
 import requests
 
-from akshare.futures.symbol_var import chinese_to_english
 from akshare.futures import cons
 from akshare.futures.requests_fun import requests_link, pandas_read_html_link
+from akshare.futures.symbol_var import chinese_to_english
 
 calendar = cons.get_calendar()
 shfe_20100126 = pd.DataFrame({'var': ['CU', 'AL', 'ZN', 'RU', 'FU', 'AU', 'RB', 'WR'],
@@ -161,19 +161,17 @@ def get_shfe_receipt_2(date: str = None, vars_list: List = cons.contract_symbols
 
 def get_czce_receipt_1(date: str = None, vars_list: List = cons.contract_symbols):
     """
-        抓取郑州商品交易所注册仓单数据
-        适用20080222至20100824(包括)
-        Parameters
-        ------
-            date: 开始日期 format：YYYY-MM-DD 或 YYYYMMDD 或 datetime.date对象 为空时为当天
-            vars_list: 合约品种如CF、TA等列表 为空时为所有商品
-        Return
-        -------
-            DataFrame:
-                展期收益率数据(DataFrame):
-                    var             商品品种                     string
-                    receipt         仓单数                       int
-                    date            日期                         string YYYYMMDD
+    抓取郑州商品交易所注册仓单数据
+    适用20080222至20100824(包括)
+    :param date: 开始日期 format：YYYY-MM-DD 或 YYYYMMDD 或 datetime.date对象 为空时为当天
+    :type date: str
+    :param vars_list: list
+    :type vars_list: 合约品种如CF、TA等列表 为空时为所有商品
+    :return: 展期收益率数据
+    :rtype: pandas.DataFrame
+    var             商品品种                     string
+    receipt         仓单数                       int
+    date            日期                         string YYYYMMDD
     """
     date = cons.convert_date(date).strftime('%Y%m%d') if date is not None else datetime.date.today()
     if date not in calendar:
@@ -265,19 +263,19 @@ def get_czce_receipt_2(date: str = None, vars_list: List = cons.contract_symbols
 
 def get_czce_receipt_3(date: str = None, vars_list: List = cons.contract_symbols):
     """
-        抓取郑州商品交易所注册仓单数据
-        适用20151112(包括)至今
-        Parameters
-        ------
-            date: 开始日期 format：YYYY-MM-DD 或 YYYYMMDD 或 datetime.date对象 为空时为当天
-            vars_list: 合约品种如CF、TA等列表 为空时为所有商品
-        Return
-        -------
-            DataFrame:
-                展期收益率数据(DataFrame):`1
-                    var             商品品种                     string
-                    receipt         仓单数                       int
-                    date            日期                         string YYYYMMDD
+    抓取郑州商品交易所注册仓单数据
+    适用20151112(包括)至今
+    Parameters
+    ------
+        date: 开始日期 format：YYYY-MM-DD 或 YYYYMMDD 或 datetime.date对象 为空时为当天
+        vars_list: 合约品种如CF、TA等列表 为空时为所有商品
+    Return
+    -------
+        DataFrame:
+            展期收益率数据(DataFrame):`1
+                var             商品品种                     string
+                receipt         仓单数                       int
+                date            日期                         string YYYYMMDD
     """
 
     date = cons.convert_date(date).strftime('%Y%m%d') if date is not None else datetime.date.today()
@@ -294,7 +292,7 @@ def get_czce_receipt_3(date: str = None, vars_list: List = cons.contract_symbols
     if int(date) <= 20171227:
         data = data[1:]
     for data_cut in data:
-        if len(data_cut.columns) > 3:
+        if len(data_cut.columns) > 3 and len(data_cut.index) > 7:
             last_indexes = [x for x in data_cut.index if '注：' in str(data_cut[0].tolist()[x])]
             if len(last_indexes) > 0:
                 last_index = last_indexes[0] - 1
@@ -304,6 +302,9 @@ def get_czce_receipt_3(date: str = None, vars_list: List = cons.contract_symbols
             else:
                 strings = data_cut[0].tolist()[0]
                 string = strings.split(' ')[0][3:]
+                if len(string) > 7:
+                    continue
+                print(string)
                 var = chinese_to_english(re.sub('[A-Z]+', '', string))
             data_cut.columns = data_cut.loc[1, :]
             data_cut = data_cut.fillna(method='pad')
@@ -323,19 +324,15 @@ def get_czce_receipt_3(date: str = None, vars_list: List = cons.contract_symbols
 
 def get_receipt(start_day: str = None, end_day: str = None, vars_list: List = cons.contract_symbols):
     """
-        获取大宗商品注册仓单数量
-        Parameters
-        ------
-            start_day: 开始日期 format：YYYY-MM-DD 或 YYYYMMDD 或 datetime.date对象 为空时为当天
-            end_day: 结束数据 format：YYYY-MM-DD 或 YYYYMMDD 或 datetime.date对象 为空时为当天
-            vars_list: 合约品种如RB、AL等列表 为空时为所有商品
-        Return
-        -------
-            DataFrame
-                展期收益率数据(DataFrame):
-                    var             商品品种                     string
-                    receipt         仓单数量                     int
-                    date            日期                        string YYYYMMDD
+    获取大宗商品注册仓单数量
+    :param start_day: 开始日期 format：YYYY-MM-DD 或 YYYYMMDD 或 datetime.date对象 为空时为当天
+    :type start_day: str
+    :param end_day: 结束数据 format：YYYY-MM-DD 或 YYYYMMDD 或 datetime.date对象 为空时为当天
+    :type end_day: str
+    :param vars_list: 合约品种如RB、AL等列表 为空时为所有商品
+    :type vars_list: str
+    :return: 展期收益率数据
+    :rtype: pandas.DataFrame
     """
     start_day = cons.convert_date(start_day) if start_day is not None else datetime.date.today()
     end_day = cons.convert_date(end_day) if end_day is not None else cons.convert_date(
@@ -378,9 +375,13 @@ def get_receipt(start_day: str = None, end_day: str = None, vars_list: List = co
                         records = records.append(f(start_day, get_vars))
 
         start_day += datetime.timedelta(days=1)
-    return records.reset_index(drop=True)
+    records.reset_index(drop=True, inplace=True)
+    if "MA" in records["var"].to_list():
+        replace_index = records[records["var"] == "MA"]["receipt"].astype(str).str.split("0", expand=True)[0].index
+        records.loc[replace_index, "receipt"] = records[records["var"] == "MA"]["receipt"].astype(str).str.split("0", expand=True)[0]
+    return records
 
 
 if __name__ == '__main__':
-    d = get_receipt('20090301', '20090310')
-    print(d)
+    get_receipt_df = get_receipt(start_day='20200225', end_day='20200225')
+    print(get_receipt_df)

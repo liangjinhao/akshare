@@ -9,21 +9,68 @@ desc: 期货配置文件
 import datetime
 import json
 import os
-import re
 import pickle
+import re
 
-# sina_tick
-subscribe_exchange_symbol_url = "http://vip.stock.finance.sina.com.cn/quotes_service/view/js/qihuohangqing.js"
-match_main_contract_url = "http://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHQFuturesData"
-match_main_contract_payload = {
+# futures_rule-futures_rule
+futures_rule_url = "http://www.gtjaqh.com/gtqh/html/calendar/dataTable"
+
+# hf_sina_spot
+hf_subscribe_exchange_symbol_url = "http://finance.sina.com.cn/money/future/hf.html"
+hf_subscribe_url = "http://hq.sinajs.cn/"
+hf_subscribe_headers = {
+    "Accept": "*/*",
+    "Accept-Encoding": "gzip, deflate",
+    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "Host": "hq.sinajs.cn",
+    "Pragma": "no-cache",
+    "Referer": "http://finance.sina.com.cn/money/future/hf.html",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.97 Safari/537.36",
+}
+
+hf_sina_spot_headers = {
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3",
+    "Accept-Encoding": "gzip, deflate",
+    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "Host": "finance.sina.com.cn",
+    "Pragma": "no-cache",
+    "Referer": "https://finance.sina.com.cn/futuremarket/",
+    "Upgrade-Insecure-Requests": "1",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.97 Safari/537.36",
+}
+
+# zh_sina_spot
+zh_subscribe_exchange_symbol_url = (
+    "http://vip.stock.finance.sina.com.cn/quotes_service/view/js/qihuohangqing.js"
+)
+zh_match_main_contract_url = "http://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHQFuturesData"
+zh_match_main_contract_payload = {
     "page": "1",
     "num": "5",
     "sort": "position",
     "asc": "0",
     "node": "001",
-    "base": "futures"
+    "base": "futures",
+}
+zh_sina_spot_headers = {
+    "Accept": "*/*",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "Host": "hq.sinajs.cn",
+    "Pragma": "no-cache",
+    "Referer": "https://finance.sina.com.cn/futuremarket/",
+    "Sec-Fetch-Mode": "no-cors",
+    "Sec-Fetch-Site": "cross-site",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.97 Safari/537.36",
 }
 
+# 99期货
 inventory_temp_headers = {
     "Accept": "image/webp,image/apng,image/*,*/*;q=0.8",
     "Accept-Encoding": "gzip, deflate",
@@ -33,7 +80,7 @@ inventory_temp_headers = {
     "Cookie": "UM_distinctid=16c378978de5cc-02cfeac5f7869b-c343162-1fa400-16c378978df8d7; __utmz=181566328.1570520149.3.2.utmcsr=baidu|utmccn=(organic)|utmcmd=organic; ASP.NET_SessionId=wj5gxuzl3fvvr25503tquq55; __utmc=181566328; _fxaid=1D9A634AB9F5D0265856F7E85E7BC196%1D%2BOOl1inxPE7181fmKs5HCs%2BdLO%2Fq%2FbSvf46UVjo%2BE7w%3D%1DPYphpUa9OlzWUzatrOQTXLPOVillbwMhTIJas%2ByfkyVL2Hd5XA1GOSslksqDkMTccXvQ2duLNsc0CHT4789JrYNbakJrpzrxLnwtBC5GCTssKHGEpor6EwAZfWJgBUlCs4JYFcGUnh3jIO69A4LsOlRMOGf4c9cd%2FbohSjTx3VA%3D; __utma=181566328.1348268634.1564299852.1571066568.1571068391.7; tgw_l7_route=eb1311426274fc07631b2135a6431f7d; __utmt=1; __utmb=181566328.7.10.1571068391",
     "Host": "service.99qh.com",
     "Referer": "http://service.99qh.com/Storage/Storage.aspx?page=99qh",
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/77.0.3865.90 Safari/537.36"
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/77.0.3865.90 Safari/537.36",
 }
 
 sample_headers = {
@@ -41,7 +88,7 @@ sample_headers = {
     "Host": "service.99qh.com",
     "Origin": "http://service.99qh.com",
     "Referer": "http://www.99qh.com/d/store.aspx",
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/77.0.3865.90 Safari/537.36"
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/77.0.3865.90 Safari/537.36",
 }
 
 qh_headers = {
@@ -56,10 +103,12 @@ qh_headers = {
     "Host": "service.99qh.com",
     "Referer": "http://service.99qh.com/Storage/Storage.aspx?page=99qh",
     "Upgrade-Insecure-Requests": "1",
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/77.0.3865.90 Safari/537.36"
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/77.0.3865.90 Safari/537.36",
 }
 # 交易法门
-JYFM_TOOLS_RECEIPT_DATE_URL = "https://www.jiaoyifamen.com/tools/receipt-expire-info/all?page=1&limit=90"
+JYFM_TOOLS_RECEIPT_DATE_URL = (
+    "https://www.jiaoyifamen.com/tools/receipt-expire-info/all?page=1&limit=90"
+)
 #
 QHKC_INDEX_URL = "https://www.qhkch.com/ajax/index_show.php"
 QHKC_INDEX_TREND_URL = "https://qhkch.com/ajax/indexes_trend.php"
@@ -76,13 +125,7 @@ BOND_BANK_URL = "http://zhuce.nafmii.org.cn/fans/publicQuery/releFileProjDataGri
 
 # 键值对: 键为交易所代码, 值为具体合约代码, TODO 需要及时补充新增的品种
 market_exchange_symbols = {
-    "cffex": [
-        "IF",
-        "IC",
-        "IH",
-        "T",
-        "TF",
-        "TS"],
+    "cffex": ["IF", "IC", "IH", "T", "TF", "TS"],
     "dce": [
         "C",
         "CS",
@@ -102,7 +145,7 @@ market_exchange_symbols = {
         "I",
         "EG",
         "RR",
-        "EB"  # 20191009
+        "EB",  # 20191009
     ],
     "czce": [
         "WH",
@@ -133,7 +176,10 @@ market_exchange_symbols = {
         "WSY",
         "CY",
         "AP",
-        "UR"],
+        "UR",
+        "CJ",  # 红枣期货
+        "SA",  # 纯碱期货
+    ],
     "shfe": [
         "CU",
         "AL",
@@ -152,7 +198,9 @@ market_exchange_symbols = {
         "SC",
         "NR",
         "SP",
-        "SS"]}
+        "SS",
+    ],
+}
 
 contract_symbols = []
 [contract_symbols.extend(i) for i in market_exchange_symbols.values()]
@@ -169,7 +217,7 @@ bond_bank_headers = {
     "Origin": "http://zhuce.nafmii.org.cn",
     "Referer": "http://zhuce.nafmii.org.cn/fans/publicQuery/manager",
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/76.0.3809.132 Safari/537.36",
-    "X-Requested-With": "XMLHttpRequest"
+    "X-Requested-With": "XMLHttpRequest",
 }
 
 headers = {
@@ -182,7 +230,8 @@ headers = {
     "DNT": "1",
     "Referer": "http://www.super-ping.com/?ping=www.google.com&locale=sc",
     "Accept-Encoding": "gzip, deflate, sdch",
-    "Accept-Language": "zh-CN,zh;q=0.8,ja;q=0.6"}
+    "Accept-Language": "zh-CN,zh;q=0.8,ja;q=0.6",
+}
 
 shfe_headers = {"User-Agent": "Mozilla/4.0 (compatible; MSIE 5.5; Windows NT)"}
 
@@ -198,7 +247,7 @@ dce_headers = {
     "Proxy-Connection": "keep-alive",
     "Referer": "http://www.dce.com.cn/publicweb/quotesdata/weekQuotesCh.html",
     "Upgrade-Insecure-Requests": "1",
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/77.0.3865.90 Safari/537.36"
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/77.0.3865.90 Safari/537.36",
 }
 
 SYS_SPOT_PRICE_URL = "http://www.100ppi.com/sf/day-{}.html"
@@ -240,7 +289,8 @@ CFFEX_COLUMNS = [
     "close",
     "settle",
     "change1",
-    "change2"]
+    "change2",
+]
 
 CZCE_COLUMNS = [
     "pre_settle",
@@ -255,7 +305,8 @@ CZCE_COLUMNS = [
     "open_interest",
     "oi_chg",
     "turnover",
-    "final_settle"]
+    "final_settle",
+]
 
 CZCE_COLUMNS_2 = [
     "pre_settle",
@@ -269,7 +320,8 @@ CZCE_COLUMNS_2 = [
     "open_interest",
     "oi_chg",
     "turnover",
-    "final_settle"]
+    "final_settle",
+]
 
 SHFE_COLUMNS = {
     "CLOSEPRICE": "close",
@@ -279,13 +331,15 @@ SHFE_COLUMNS = {
     "OPENPRICE": "open",
     "PRESETTLEMENTPRICE": "pre_settle",
     "SETTLEMENTPRICE": "settle",
-    "VOLUME": "volume"}
+    "VOLUME": "volume",
+}
 
 SHFE_V_WAP_COLUMNS = {
     ":B1": "date",
     "INSTRUMENT_ID": "symbol",
     "TIME": "time_range",
-    "REF_SETTLEMENT_PRICE": "v_wap"}
+    "REF_SETTLEMENT_PRICE": "v_wap",
+}
 
 DCE_COLUMNS = [
     "open",
@@ -299,7 +353,8 @@ DCE_COLUMNS = [
     "volume",
     "open_interest",
     "oi_chg",
-    "turnover"]
+    "turnover",
+]
 
 DCE_OPTION_COLUMNS = [
     "open",
@@ -315,7 +370,8 @@ DCE_OPTION_COLUMNS = [
     "open_interest",
     "oi_chg",
     "turnover",
-    "exercise_volume"]
+    "exercise_volume",
+]
 
 OUTPUT_COLUMNS = [
     "symbol",
@@ -329,7 +385,8 @@ OUTPUT_COLUMNS = [
     "turnover",
     "settle",
     "pre_settle",
-    "variety"]
+    "variety",
+]
 
 OPTION_OUTPUT_COLUMNS = [
     "symbol",
@@ -347,7 +404,8 @@ OPTION_OUTPUT_COLUMNS = [
     "turnover",
     "implied_volatility",
     "exercise_volume",
-    "variety"]
+    "variety",
+]
 
 DCE_MAP = {
     "豆一": "A",
@@ -368,7 +426,8 @@ DCE_MAP = {
     "铁矿石": "I",
     "乙二醇": "EG",
     "粳米": "RR",
-    "苯乙烯": "EB"
+    "苯乙烯": "EB",
+    "液化石油气": "PG",
 }
 
 
@@ -386,10 +445,8 @@ def convert_date(date):
             groups = match.groups()
             if len(groups) == 3:
                 return datetime.date(
-                    year=int(
-                        groups[0]), month=int(
-                        groups[1]), day=int(
-                        groups[2]))
+                    year=int(groups[0]), month=int(groups[1]), day=int(groups[2])
+                )
     return None
 
 

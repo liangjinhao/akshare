@@ -3,28 +3,30 @@
 """
 Author: Albert King
 date: 2019/9/30 13:58
+update: 2020/3/17 13:06
 contact: jindaxiang@163.com
 desc: 从大连商品交易所、上海期货交易所、郑州商品交易所、中国金融期货交易所采集前 20 会员持仓数据;
 建议下午 16:30 以后采集当天数据, 避免交易所数据更新不稳定;
 郑州商品交易所格式分为三类
 """
+import datetime
 import json
 import re
-import datetime
 import warnings
 from io import StringIO
 
-from bs4 import BeautifulSoup
 import pandas as pd
+import requests
+from bs4 import BeautifulSoup
 
+from akshare.futures import cons
 from akshare.futures.requests_fun import (
     requests_link
 )
+from akshare.futures.symbol_var import chinese_to_english, find_chinese
 from akshare.futures.symbol_var import (
     symbol_varieties
 )
-from akshare.futures import cons
-from akshare.futures.symbol_var import chinese_to_english, find_chinese
 
 calendar = cons.get_calendar()
 rank_columns = ['vol_party_name', 'vol', 'vol_chg', 'long_party_name', 'long_open_interest',
@@ -44,17 +46,17 @@ def get_rank_sum_daily(start_day=None, end_day=None, vars_list=cons.contract_sym
     :param vars_list: 合约品种如RB、AL等列表 为空时为所有商品
     :return: pd.DataFrame
     展期收益率数据(DataFrame):
-        symbol                           标的合约                     string
-        var                              商品品种                     string
-        vol_top5                         成交量前5会员成交量总和         int
-        vol_chg_top5                     成交量前5会员成交量变化总和      int
-        long_open_interest_top5          持多单前5会员持多单总和         int
-        long_open_interest_chg_top5      持多单前5会员持多单变化总和      int
-        short_open_interest_top5         持空单前5会员持空单总和         int
-        short_open_interest_chg_top5     持空单前5会员持空单变化总和      int
-        vol_top10                        成交量前10会员成交量总和        int
-        ...
-        date                             日期                         string YYYYMMDD
+    symbol                           标的合约                     string
+    var                              商品品种                     string
+    vol_top5                         成交量前5会员成交量总和         int
+    vol_chg_top5                     成交量前5会员成交量变化总和      int
+    long_open_interest_top5          持多单前5会员持多单总和         int
+    long_open_interest_chg_top5      持多单前5会员持多单变化总和      int
+    short_open_interest_top5         持空单前5会员持空单总和         int
+    short_open_interest_chg_top5     持空单前5会员持空单变化总和      int
+    vol_top10                        成交量前10会员成交量总和        int
+    ...
+    date                             日期                         string YYYYMMDD
     """
     start_day = cons.convert_date(start_day) if start_day is not None else datetime.date.today()
     end_day = cons.convert_date(end_day) if end_day is not None else cons.convert_date(
@@ -189,7 +191,7 @@ def get_rank_sum(date=None, vars_list=cons.contract_symbols):
 
 def get_shfe_rank_table(date=None, vars_list=cons.contract_symbols):
     """
-    抓取上海商品期货交易所前20会员持仓排名数据明细
+    上海期货交易所前 20 会员持仓排名数据明细
     注：该交易所只公布每个品种内部的标的排名，没有公布品种的总排名
     数据从20020107开始，每交易日16:30左右更新数据
     :param date: 日期 format：YYYY-MM-DD 或 YYYYMMDD 或 datetime.date对象 为空时为当天
@@ -235,7 +237,7 @@ def get_shfe_rank_table(date=None, vars_list=cons.contract_symbols):
 
     if len(df.columns) < 3:
         return {}
-    df = df.applymap(lambda x: x.strip() if type(x) == type('') else x)
+    df = df.applymap(lambda x: x.strip() if isinstance(x, str) else x)
     df = df.applymap(lambda x: None if x == '' else x)
     df['variety'] = df['symbol'].apply(lambda x: symbol_varieties(x))
 
@@ -255,41 +257,43 @@ def get_shfe_rank_table(date=None, vars_list=cons.contract_symbols):
     return big_dict
 
 
-def _czce_df_read(url, skip_rows, encoding='utf-8'):
+def _czce_df_read(url, skip_rows, encoding='utf-8', header=0):
     """
-    抓取郑州商品交易所的网页数据
+    郑州商品交易所的网页数据
+    :param header:
+    :type header:
     :param url: 网站 string
     :param skip_rows: 去掉前几行 int
     :param encoding: utf-8 or gbk or gb2312
     :return: pd.DataFrame
     """
     r = requests_link(url, encoding)
-    data = pd.read_html(r.text, match='.+', flavor=None, header=0, index_col=0, skiprows=skip_rows, attrs=None,
+    data = pd.read_html(r.text, match='.+', flavor=None, header=header, index_col=0, skiprows=skip_rows, attrs=None,
                         parse_dates=False, thousands=', ', encoding="gbk", decimal='.',
                         converters=None, na_values=None, keep_default_na=True)
     return data
 
 
-def get_czce_rank_table(date=None, vars_list=cons.contract_symbols):
+def get_czce_rank_table(date="20081015", vars_list=cons.contract_symbols):
     """
-    抓取郑州商品交易所前20会员持仓排名数据明细
+    郑州商品交易所前 20 会员持仓排名数据明细
     注：该交易所既公布了品种排名, 也公布了标的排名
     :param date: 日期 format：YYYY-MM-DD 或 YYYYMMDD 或 datetime.date对象 为空时为当天
     :param vars_list: 合约品种如RB、AL等列表 为空时为所有商品, 数据从20050509开始，每交易日16:30左右更新数据
     :return: pd.DataFrame
-        rank                        排名                        int
-        vol_party_name              成交量排序的当前名次会员        string(中文)
-        vol                         该会员成交量                  int
-        vol_chg                     该会员成交量变化量             int
-        long_party_name             持多单排序的当前名次会员        string(中文)
-        long_open_interest               该会员持多单                  int
-        long_open_interest_chg           该会员持多单变化量             int
-        short_party_name            持空单排序的当前名次会员        string(中文)
-        short_open_interest              该会员持空单                  int
-        short_open_interest_chg          该会员持空单变化量             int
-        symbol                      标的合约                     string
-        var                         品种                        string
-        date                        日期                        string YYYYMMDD
+    rank                        排名                        int
+    vol_party_name              成交量排序的当前名次会员        string(中文)
+    vol                         该会员成交量                  int
+    vol_chg                     该会员成交量变化量             int
+    long_party_name             持多单排序的当前名次会员        string(中文)
+    long_open_interest               该会员持多单                  int
+    long_open_interest_chg           该会员持多单变化量             int
+    short_party_name            持空单排序的当前名次会员        string(中文)
+    short_open_interest              该会员持空单                  int
+    short_open_interest_chg          该会员持空单变化量             int
+    symbol                      标的合约                     string
+    var                         品种                        string
+    date                        日期                        string YYYYMMDD
     """
     date = cons.convert_date(date) if date is not None else datetime.date.today()
     if date < datetime.date(2005, 5, 9):
@@ -300,23 +304,28 @@ def get_czce_rank_table(date=None, vars_list=cons.contract_symbols):
         return {}
     if date <= datetime.date(2010, 8, 25):
         url = cons.CZCE_VOL_RANK_URL_1 % (date.strftime('%Y%m%d'))
+        r = requests.get(url)
+        r.encoding = "utf-8"
+        soup = BeautifulSoup(r.text, "lxml")
         data = _czce_df_read(url, skip_rows=0)
         r = requests_link(url, 'utf-8')
         r.encoding = 'utf-8'
-        soup = BeautifulSoup(r.text, 'lxml', from_encoding="gb2312")
         symbols = []
         for link in soup.find_all('b'):
             strings = (str(link).split(' '))
+
             if len(strings) > 5:
                 try:
                     symbol = chinese_to_english(strings[4])
                 except:
                     symbol = strings[4]
+                if symbol == "SR905日期:":
+                    symbol = "SR905"
                 symbols.append(symbol)
         big_dict = {}
         for i in range(len(symbols)):
             symbol = symbols[i]
-            table_cut = data[i + 2]
+            table_cut = data[i + 1]
             table_cut.columns = rank_columns
             table_cut = table_cut.iloc[:-1, :]
             table_cut.loc[:, 'rank'] = table_cut.index
@@ -334,12 +343,17 @@ def get_czce_rank_table(date=None, vars_list=cons.contract_symbols):
             big_dict[symbol] = table_cut.reset_index(drop=True)
         return big_dict
 
-    elif date <= datetime.date(2015, 11, 11):
+    elif date <= datetime.date(2015, 11, 11):  # 20200311 格式修正
         url = cons.CZCE_VOL_RANK_URL_2 % (date.year, date.strftime('%Y%m%d'))
-        data = _czce_df_read(url, skip_rows=1)[1]
-    elif date < datetime.date(2017, 12, 28):
+        data = _czce_df_read(url, skip_rows=0, header=None)[3:]
+        big_df = pd.DataFrame()
+        for item in data:
+            big_df = pd.concat([big_df, item], axis=0, ignore_index=False)
+        big_df.columns = big_df.iloc[0, :].tolist()
+        data = big_df.iloc[1:, :]
+    elif date < datetime.date(2017, 12, 28):  # 20200311 格式修正
         url = cons.CZCE_VOL_RANK_URL_3 % (date.year, date.strftime('%Y%m%d'))
-        data = _czce_df_read(url, skip_rows=1)[0]
+        data = _czce_df_read(url, skip_rows=0, header=0)[1]
     else:
         url = cons.CZCE_VOL_RANK_URL_3 % (date.year, date.strftime('%Y%m%d'))
         data = _czce_df_read(url, skip_rows=0)[0]
@@ -348,6 +362,7 @@ def get_czce_rank_table(date=None, vars_list=cons.contract_symbols):
         return {}
 
     table = pd.DataFrame(data.iloc[:, :9])
+    table.index.name = table.columns[0]
     table.columns = rank_columns
     table.loc[:, 'rank'] = table.index
     table[intColumns] = table[intColumns].astype(str)
@@ -386,35 +401,35 @@ def get_czce_rank_table(date=None, vars_list=cons.contract_symbols):
             table_cut = table_cut.loc[[x for x in table_cut.index if x in [str(i) for i in range(21)]], :]
 
             table_cut = _table_cut_cal(table_cut, symbol)
-            big_dict[symbol] = table_cut.reset_index(drop=True)
+            big_dict[symbol.strip()] = table_cut.reset_index(drop=True)
 
     return big_dict
 
 
-def get_dce_rank_table(date=None, vars_list=cons.contract_symbols):
+def get_dce_rank_table(date="20180404", vars_list=cons.contract_symbols):
     """
-    抓取大连商品期货交易所前20会员持仓排名数据明细
-    注：该交易所即公布了品种排名，也公布了标的排名
-    :param date: 日期 format：YYYY-MM-DD 或 YYYYMMDD 或 datetime.date对象 为空时为当天
-    :param vars_list: 合约品种如RB、AL等列表为空时为所有商品, 数据从20060104开始，每交易日16:30左右更新数据
-    :return: pd.DataFrame
-        rank                        排名                        int
-        vol_party_name              成交量排序的当前名次会员        string(中文)
-        vol                         该会员成交量                  int
-        vol_chg                     该会员成交量变化量             int
-        long_party_name             持多单排序的当前名次会员        string(中文)
-        long_open_interest               该会员持多单                  int
-        long_open_interest_chg           该会员持多单变化量             int
-        short_party_name            持空单排序的当前名次会员        string(中文)
-        short_open_interest              该会员持空单                  int
-        short_open_interest_chg          该会员持空单变化量             int
-        symbol                      标的合约                     string
-        var                         品种                        string
-        date                        日期                        string YYYYMMDD
+    大连商品交易所前 20 会员持仓排名数据明细
+    注: 该交易所既公布品种排名, 也公布标的合约排名
+    :param date: 日期 format：YYYY-MM-DD 或 YYYYMMDD 或 datetime.date 对象, 为空时为当天
+    :param vars_list: 合约品种如 RB、AL等列表为空时为所有商品, 数据从 20060104 开始，每交易日 16:30 左右更新数据
+    :return: pandas.DataFrame
+    rank                        排名                        int
+    vol_party_name              成交量排序的当前名次会员      string(中文)
+    vol                         该会员成交量                 int
+    vol_chg                     该会员成交量变化量            int
+    long_party_name             持多单排序的当前名次会员      string(中文)
+    long_open_interest          该会员持多单                 int
+    long_open_interest_chg      该会员持多单变化量            int
+    short_party_name            持空单排序的当前名次会员       string(中文)
+    short_open_interest         该会员持空单                  int
+    short_open_interest_chg     该会员持空单变化量             int
+    symbol                      标的合约                     string
+    var                         品种                        string
+    date                        日期                        string YYYYMMDD
     """
     date = cons.convert_date(date) if date is not None else datetime.date.today()
     if date < datetime.date(2006, 1, 4):
-        print(Exception("dce数据源开始日期为20060104，跳过"))
+        print(Exception("大连商品交易所数据源开始日期为20060104，跳过"))
         return {}
     if date.strftime('%Y%m%d') not in calendar:
         warnings.warn('%s非交易日' % date.strftime('%Y%m%d'))
@@ -423,12 +438,10 @@ def get_dce_rank_table(date=None, vars_list=cons.contract_symbols):
     big_dict = {}
     for var in vars_list:
         url = cons.DCE_VOL_RANK_URL % (var.lower(), var.lower(), date.year, date.month - 1, date.day)
-
         list_60_name = []
         list_60 = []
         list_60_chg = []
         rank = []
-
         texts = requests_link(url).content.splitlines()
         if not texts:
             return False
@@ -461,26 +474,26 @@ def get_dce_rank_table(date=None, vars_list=cons.contract_symbols):
     return big_dict
 
 
-def get_cffex_rank_table(date=None, vars_list=cons.contract_symbols):
+def get_cffex_rank_table(date="20200311", vars_list=cons.contract_symbols):
     """
-    抓取郑州商品期货交易所前20会员持仓排名数据明细
-    注：该交易所即公布了品种排名，也公布了标的排名
+    中国金融期货交易所前20会员持仓排名数据明细
+    注：该交易所既公布品种排名，也公布标的排名
     :param date: 日期 format：YYYY-MM-DD 或 YYYYMMDD 或 datetime.date对象 为空时为当天
     :param vars_list: 合约品种如RB、AL等列表 为空时为所有商品, 数据从20100416开始，每交易日16:30左右更新数据
     :return: pd.DataFrame
-        rank                        排名                        int
-        vol_party_name              成交量排序的当前名次会员        string(中文)
-        vol                         该会员成交量                  int
-        vol_chg                     该会员成交量变化量             int
-        long_party_name             持多单排序的当前名次会员        string(中文)
-        long_open_interest          该会员持多单                  int
-        long_open_interest_chg      该会员持多单变化量             int
-        short_party_name            持空单排序的当前名次会员        string(中文)
-        short_open_interest         该会员持空单                  int
-        short_open_interest_chg     该会员持空单变化量             int
-        symbol                      标的合约                     string
-        var                         品种                        string
-        date                        日期                        string YYYYMMDD
+    rank                        排名                        int
+    vol_party_name              成交量排序的当前名次会员        string(中文)
+    vol                         该会员成交量                  int
+    vol_chg                     该会员成交量变化量             int
+    long_party_name             持多单排序的当前名次会员        string(中文)
+    long_open_interest          该会员持多单                  int
+    long_open_interest_chg      该会员持多单变化量             int
+    short_party_name            持空单排序的当前名次会员        string(中文)
+    short_open_interest         该会员持空单                  int
+    short_open_interest_chg     该会员持空单变化量             int
+    symbol                      标的合约                     string
+    var                         品种                        string
+    date                        日期                        string YYYYMMDD
     """
     vars_list = [i for i in vars_list if i in cons.market_exchange_symbols['cffex']]
     date = cons.convert_date(date) if date is not None else datetime.date.today()
@@ -492,14 +505,19 @@ def get_cffex_rank_table(date=None, vars_list=cons.contract_symbols):
         return {}
     big_dict = {}
     for var in vars_list:
+        # print(var)
         url = cons.CFFEX_VOL_RANK_URL % (date.strftime('%Y%m'), date.strftime('%d'), var)
         r = requests_link(url, encoding='gbk')
         if not r:
             return False
         if '网页错误' not in r.text:
-            table = pd.read_csv(StringIO(r.text.split('\n交易日,')[1]))
+            try:
+                temp_chche = StringIO(r.text.split('\n交易日,')[1])
+            except:
+                temp_chche = StringIO(r.text.split('\n交易日,')[0][4:])  # 20200316开始数据结构变化，统一格式
+            table = pd.read_csv(temp_chche)
             table = table.dropna(how='any')
-            table = table.applymap(lambda x: x.strip() if type(x) == type('') else x)
+            table = table.applymap(lambda x: x.strip() if isinstance(x, str) else x)
             for symbol in set(table['合约']):
                 table_cut = table[table['合约'] == symbol]
                 table_cut.columns = ['symbol', 'rank'] + rank_columns
@@ -512,8 +530,11 @@ def _table_cut_cal(table_cut, symbol):
     """
     表格切分
     :param table_cut: 需要切分的表格
-    :param symbol: 品种
-    :return: pd.DataFrame
+    :type table_cut: pandas.DataFrame
+    :param symbol: 具体合约的代码
+    :type symbol: str
+    :return:
+    :rtype: pandas.DataFrame
     """
     var = symbol_varieties(symbol)
     table_cut[intColumns + ['rank']] = table_cut[intColumns + ['rank']].astype(int)
@@ -529,7 +550,23 @@ def _table_cut_cal(table_cut, symbol):
 
 
 if __name__ == '__main__':
-    dfs = get_dce_rank_table('20181210')
-    # for k, v in dfs.items():
-    #     print(type(v['long_open_interest'].tolist()[-1]))
-    get_rank_sum("20180301")
+    get_czce_rank_table_first_df = get_czce_rank_table(date='20081015', vars_list=["SR"])
+    print(get_czce_rank_table_first_df)
+    get_czce_rank_table_second_df = get_czce_rank_table(date='20151112')
+    print(get_czce_rank_table_second_df)
+    get_czce_rank_table_third_df = get_czce_rank_table(date='20191227')
+    print(get_czce_rank_table_third_df)
+    get_cffex_rank_table_df = get_cffex_rank_table(date='20200316')
+    print(get_cffex_rank_table_df)
+    get_shfe_rank_table_df = get_shfe_rank_table(date='20190711')
+    print(get_shfe_rank_table_df)
+    get_shfe_rank_table_first_df = get_dce_rank_table(date='20131227')
+    print(get_shfe_rank_table_first_df)
+    get_shfe_rank_table_second_df = get_dce_rank_table(date='20171227')
+    print(get_shfe_rank_table_second_df)
+    get_shfe_rank_table_third_df = get_dce_rank_table(date='20180718')
+    print(get_shfe_rank_table_third_df)
+    get_rank_sum_daily_df = get_rank_sum_daily(start_day="20200313", end_day="20200317")
+    print(get_rank_sum_daily_df)
+
+
